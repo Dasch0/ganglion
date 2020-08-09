@@ -1,0 +1,9 @@
+[package]
+name = "ganglion"
+version = "0.1.0"
+authors = ["das"]
+edition = "2018"
+
+[dependencies]
+plotters = "0.2.15"
+ferris-says = "0.2.0"
