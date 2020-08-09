@@ -7,3 +7,4 @@ edition = "2018"
 [dependencies]
 plotters = "0.2.15"
 ferris-says = "0.2.0"
+ndarray = "0.13.1"
