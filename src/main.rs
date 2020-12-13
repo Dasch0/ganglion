@@ -6,6 +6,56 @@ use plotlib::repr::Plot;
 use plotlib::style::{PointMarker, PointStyle};
 use plotlib::view::ContinuousView;
 
+/// Calculates the cross entropy loss of a prediction
+/// Based on an array of categorical labels
+fn calculate_cross_entropy_loss(
+    prediction: &Array2<f64>,
+    truth: &Array1<u8>
+) -> f64
+{
+    // clip prediction values of 0 or 1
+    // TODO: Remove extra allocations, or preallocate
+    let clipped_prediction = prediction.mapv(|v| v.max(1e-7).min(1.0 - 1e-7));
+
+    // TODO: Remove extra allocations, or preallocate 
+    let confidences: Array1<f64> = clipped_prediction
+        .axis_iter(Axis(0))
+        .zip(truth)
+        .map(|(row, label)| {
+            row[*label as usize]
+        }).collect();
+
+    // TODO: Remove extra allocations, or preallocate
+    let sample_losses = confidences.mapv(|v|-v.ln());
+
+    sample_losses.mean().unwrap()
+}
+
+/// Calculates the accuracy of a prediction
+/// Based on an array of categorical labels
+// TODO: Cleanup convoluted logic 
+fn calculate_accuracy(
+    prediction: &Array2<f64>,
+    truth: &Array1<u8>,
+) -> f64 {
+
+    let classifications: Array1<usize> = prediction.axis_iter(Axis(0)).map(|row| {
+        let (i, _) = row
+            .iter()
+            .enumerate()
+            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap()).unwrap();
+        i
+    }).collect();
+
+    let sample_accuracy: Array1<f64> = classifications
+        .iter()
+        .zip(truth)
+        .map(|(c, t)| (*c == *t as usize) as u64 as f64)
+        .collect();
+    sample_accuracy.mean().unwrap()
+}
+
+
 struct LayerDense {
     pub weights: Array2<f64>,
     pub biases: Array1<f64>,
@@ -23,13 +73,15 @@ impl LayerDense {
     }
 }
 
-/// Apply relu activation function to the input, elementwise
+/// Apply relu activation function to each element of the input
 fn apply_relu(inputs: &mut Array2<f64>) {
     inputs
         .iter_mut()
         .for_each(|x| *x = *x * ((*x > 0.0) as u64 as f64));
 }
 
+
+/// Apply softmax to each row of the input
 // TODO: The current implementation of softmax is naive and very slow.
 // Should be possible to speed this up quite a bit
 fn apply_softmax(inputs: &mut Array2<f64>) {
@@ -56,6 +108,8 @@ fn apply_softmax(inputs: &mut Array2<f64>) {
     });
 }
 
+/// Generate an input data set with three labels in a spiral pattern
+/// Algorithm adapted from https://cs231n.github.io/neural-networks-case-study/
 fn generate_spiral_data() -> (ndarray::Array2<f64>, ndarray::Array1<u8>) {
     let n = 100; // points per class
     let k = 3; // number of classes
@@ -74,7 +128,7 @@ fn generate_spiral_data() -> (ndarray::Array2<f64>, ndarray::Array1<u8>) {
             let mut row = data.slice_mut(s![ix[j] as usize, ..]);
             row[0] = r[j] * t[j].sin();
             row[1] = r[j] * t[j].cos();
-            labels[ix[i] as usize] = i as u8;
+            labels[ix[j] as usize] = i as u8;
         }
     }
     (data, labels)
@@ -98,7 +152,7 @@ fn to_plottable(data: &Array2<f64>) -> Vec<(f64, f64)> {
 
 fn main() {
     // generate and plot training data
-    let (data, _labels) = generate_spiral_data();
+    let (data, labels) = generate_spiral_data();
     let plot_data = to_plottable(&data);
     let s1 = Plot::new(plot_data).point_style(PointStyle::new().marker(PointMarker::Circle));
     let v = ContinuousView::new()
@@ -107,7 +161,7 @@ fn main() {
         .y_range(-1., 1.)
         .x_label("X")
         .y_label("Y");
-    println!("{}", Page::single(&v).dimensions(80, 30).to_text().unwrap());
+    println!("input data: \n{}", Page::single(&v).dimensions(80, 30).to_text().unwrap());
 
     // create simple two layer network
     let dense_layer_0 = LayerDense::new(2, 3);
@@ -119,6 +173,11 @@ fn main() {
     let mut output_layer_1 = dense_layer_1.forward(&output_layer_0);
     apply_softmax(&mut output_layer_1);
 
-    // print the first few outputs
-    println!("{:#?}", output_layer_1.slice(s![..5, ..]));
+    // calculate loss
+    let loss = calculate_cross_entropy_loss(&output_layer_1, &labels);
+    println!("loss: {:#?}", loss);
+
+    // calculate accuracy
+    let acc = calculate_accuracy(&output_layer_1, &labels);
+    println!("accuracy: {:#?}", acc);
 }
