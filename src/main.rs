@@ -24,6 +24,32 @@ impl LayerDense {
   }
 }
 
+/// Apply relu activation function to the input, elementwise
+fn apply_relu(inputs: &mut Array2<f64>) {
+    inputs.iter_mut().for_each(|x| {
+        *x = *x * ((*x > 0.0) as u64 as f64)
+    });
+}
+
+// TODO: The current implementation is clear to follow, but slow.
+// This probably can be optimized by combining iterator passes
+fn apply_softmax(inputs: &mut Array2<f64>) {
+    // algorithm from nnfs.io chapter 4
+    let e = 2.71828182846f64;
+
+    // Step 0, find the max value in each row 
+    let max: Vec<f64> = inputs.axis_iter(Axis(0)).map(|row| {
+        *row.iter().max_by(|a, b| a.partial_cmp(b).unwrap()).unwrap()
+    }).collect();
+
+    // Step 1, shift each element by the largest value on that row
+
+    inputs.iter_mut().for_each(|x| *x = *x - 
+
+    // Step 2, exponentiate each shifted element
+    inputs.iter_mut().for_each(|x| *x = e.powf(*x));
+}
+
 fn generate_spiral_data() -> (ndarray::Array2<f64>, ndarray::Array1<u8>){
     let n = 100; // points per class
     let k = 3; // number of classes
@@ -81,9 +107,10 @@ fn main() {
 
     // execute one layer of the network
     let dense_layer_0 = LayerDense::new(2, 3);
-    let output = dense_layer_0.forward(&data);
+
+    let mut output = dense_layer_0.forward(&data);
+    apply_relu(&mut output);
     
     // print the first few outputs
-    println!("{:#?}", output.slice(s![..5, ..])); 
-    
+    println!("{:#?}", output.slice(s![.., ..])); 
 }
