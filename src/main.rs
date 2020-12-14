@@ -77,7 +77,7 @@ impl LayerDense {
 fn apply_relu(inputs: &mut Array2<f64>) {
     inputs
         .iter_mut()
-        .for_each(|x| *x = *x * ((*x > 0.0) as u64 as f64));
+        .for_each(|x| *x *= (*x > 0.0) as u64 as f64);
 }
 
 
@@ -143,7 +143,6 @@ fn generate_spiral_data() -> (ndarray::Array2<f64>, ndarray::Array1<u8>) {
 ///
 ///     This method is not performant. A per element copy is performed as
 ///     tuple memory layout cannot be guaranteed
-
 fn to_plottable(data: &Array2<f64>) -> Vec<(f64, f64)> {
     data.axis_iter(Axis(0))
         .map(|row| (row[0], row[1]))
