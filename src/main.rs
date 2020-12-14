@@ -11,41 +11,39 @@ use plotlib::view::ContinuousView;
 fn calculate_cross_entropy_loss(
     prediction: &Array2<f64>,
     truth: &Array1<u8>
-) -> f64
-{
+) -> f64 {
     // clip prediction values of 0 or 1
     // TODO: Remove extra allocations, or preallocate
     let clipped_prediction = prediction.mapv(|v| v.max(1e-7).min(1.0 - 1e-7));
 
-    // TODO: Remove extra allocations, or preallocate 
+    // TODO: Remove extra allocations, or preallocate
     let confidences: Array1<f64> = clipped_prediction
         .axis_iter(Axis(0))
         .zip(truth)
-        .map(|(row, label)| {
-            row[*label as usize]
-        }).collect();
+        .map(|(row, label)| row[*label as usize])
+        .collect();
 
     // TODO: Remove extra allocations, or preallocate
-    let sample_losses = confidences.mapv(|v|-v.ln());
+    let sample_losses = confidences.mapv(|v| -v.ln());
 
     sample_losses.mean().unwrap()
 }
 
 /// Calculates the accuracy of a prediction
 /// Based on an array of categorical labels
-// TODO: Cleanup convoluted logic 
-fn calculate_accuracy(
-    prediction: &Array2<f64>,
-    truth: &Array1<u8>,
-) -> f64 {
-
-    let classifications: Array1<usize> = prediction.axis_iter(Axis(0)).map(|row| {
-        let (i, _) = row
-            .iter()
-            .enumerate()
-            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap()).unwrap();
-        i
-    }).collect();
+// TODO: Cleanup convoluted logic
+fn calculate_accuracy(prediction: &Array2<f64>, truth: &Array1<u8>) -> f64 {
+    let classifications: Array1<usize> = prediction
+        .axis_iter(Axis(0))
+        .map(|row| {
+            let (i, _) = row
+                .iter()
+                .enumerate()
+                .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+                .unwrap();
+            i
+        })
+        .collect();
 
     let sample_accuracy: Array1<f64> = classifications
         .iter()
@@ -55,21 +53,33 @@ fn calculate_accuracy(
     sample_accuracy.mean().unwrap()
 }
 
-
 struct LayerDense {
+    pub inputs: Array2<f64>,
     pub weights: Array2<f64>,
     pub biases: Array1<f64>,
 }
 
+// TODO: Make inputs an option (for before forward pass)
 impl LayerDense {
-    fn new(n_inputs: Ix, n_neurons: Ix) -> LayerDense {
+    fn new(n_inputs: Ix, dim_inputs: Ix, n_neurons: Ix) -> LayerDense {
         LayerDense {
+            inputs: Array2::<f64>::zeros((n_inputs, dim_inputs)),
             weights: Array::random((n_inputs, n_neurons), Uniform::new(0., 1.)),
             biases: Array1::<f64>::zeros(n_neurons),
         }
     }
-    fn forward(&self, inputs: &Array2<f64>) -> Array2<f64> {
+    fn forward(&mut self, inputs: &Array2<f64>) -> Array2<f64> {
+        self.inputs = *inputs;
         inputs.dot(&self.weights) + &self.biases
+    }
+
+    fn backward(&self, dvalues: &Array2<f64>) {
+        let dweights = self.inputs.t().dot(dvalues);
+        let dbiases: Array1<f64> = dvalues
+            .axis_iter(Axis(0))
+            .map(|row| row.sum())
+            .collect();
+        let dinputs = dvalues.dot(&self.weights.t());
     }
 }
 
@@ -80,7 +90,6 @@ fn apply_relu(inputs: &mut Array2<f64>) {
         .for_each(|x| *x *= (*x > 0.0) as u64 as f64);
 }
 
-
 /// Apply softmax to each row of the input
 // TODO: The current implementation of softmax is naive and very slow.
 // Should be possible to speed this up quite a bit
@@ -88,7 +97,8 @@ fn apply_softmax(inputs: &mut Array2<f64>) {
     // algorithm from nnfs.io chapter 4
     let e = 2.71828182846f64;
 
-    // Step 1, find the max value in each row and subtract from each element in the row
+    // Step 1, find the max value in each row and subtract from each element in
+    // the row
     inputs.axis_iter_mut(Axis(0)).for_each(|row| {
         let max = *row.iter().max_by(|a, b| a.partial_cmp(b).unwrap()).unwrap();
         for x in row {
@@ -153,14 +163,18 @@ fn main() {
     // generate and plot training data
     let (data, labels) = generate_spiral_data();
     let plot_data = to_plottable(&data);
-    let s1 = Plot::new(plot_data).point_style(PointStyle::new().marker(PointMarker::Circle));
+    let s1 = Plot::new(plot_data)
+        .point_style(PointStyle::new().marker(PointMarker::Circle));
     let v = ContinuousView::new()
         .add(s1)
         .x_range(-1., 1.)
         .y_range(-1., 1.)
         .x_label("X")
         .y_label("Y");
-    println!("input data: \n{}", Page::single(&v).dimensions(80, 30).to_text().unwrap());
+    println!(
+        "input data: \n{}",
+        Page::single(&v).dimensions(80, 30).to_text().unwrap()
+    );
 
     // create simple two layer network
     let dense_layer_0 = LayerDense::new(2, 3);
