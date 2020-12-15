@@ -54,32 +54,39 @@ fn calculate_accuracy(prediction: &Array2<f64>, truth: &Array1<u8>) -> f64 {
 }
 
 struct LayerDense {
-    pub inputs: Array2<f64>,
+    pub input: Array2<f64>,
     pub weights: Array2<f64>,
     pub biases: Array1<f64>,
+    pub dweights: Array2<f64>,
+    pub dbiases: Array1<f64>,
+    pub dinputs: Array2<f64>,
 }
 
 // TODO: Make inputs an option (for before forward pass)
 impl LayerDense {
     fn new(n_inputs: Ix, dim_inputs: Ix, n_neurons: Ix) -> LayerDense {
         LayerDense {
-            inputs: Array2::<f64>::zeros((n_inputs, dim_inputs)),
+            input: Array2::<f64>::zeros((n_inputs, dim_inputs)),
             weights: Array::random((n_inputs, n_neurons), Uniform::new(0., 1.)),
             biases: Array1::<f64>::zeros(n_neurons),
+            output: Array2::<f64>::zeros
+            dweights: Array2::<f64>::zeros((n_inputs, n_neurons)),
+            dbiases: Array1::<f64>::zeros(n_neurons),
+            dinputs: Array2::<f64>::zeros((n_inputs, dim_inputs)),
         }
     }
     fn forward(&mut self, inputs: &Array2<f64>) -> Array2<f64> {
-        self.inputs = *inputs;
+        self.input = *inputs;
         inputs.dot(&self.weights) + &self.biases
     }
 
-    fn backward(&self, dvalues: &Array2<f64>) {
-        let dweights = self.inputs.t().dot(dvalues);
-        let dbiases: Array1<f64> = dvalues
+    fn backward(&mut self, dvalues: &Array2<f64>) {
+        self.dweights = self.input.t().dot(dvalues);
+        self.dbiases = dvalues
             .axis_iter(Axis(0))
             .map(|row| row.sum())
             .collect();
-        let dinputs = dvalues.dot(&self.weights.t());
+        self.dinputs = dvalues.dot(&self.weights.t());
     }
 }
 
@@ -89,6 +96,8 @@ fn apply_relu(inputs: &mut Array2<f64>) {
         .iter_mut()
         .for_each(|x| *x *= (*x > 0.0) as u64 as f64);
 }
+
+fn backwards_relu(
 
 /// Apply softmax to each row of the input
 // TODO: The current implementation of softmax is naive and very slow.
